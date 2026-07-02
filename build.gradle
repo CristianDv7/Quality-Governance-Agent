@@ -1,7 +1,9 @@
 plugins {
     id 'java'
+    id 'jacoco'
     id 'org.springframework.boot' version '4.1.0'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.openapi.generator' version '7.13.0'
 }
 
 group = 'com.example'
@@ -12,6 +14,8 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 repositories {
@@ -19,19 +23,135 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-h2console'
+    // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // OpenAPI / Swagger UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
+    implementation 'jakarta.validation:jakarta.validation-api:3.1.1'
+    implementation 'jakarta.annotation:jakarta.annotation-api:3.0.0'
+
+    // Resilience
+    implementation 'org.springframework.retry:spring-retry:2.0.12'
+    implementation 'org.springframework:spring-aspects'
+
+    // Lombok
     compileOnly 'org.projectlombok:lombok'
-    runtimeOnly 'com.h2database:h2'
     annotationProcessor 'org.projectlombok:lombok'
-    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-    testCompileOnly 'org.projectlombok:lombok'
+
+    // Database
+    runtimeOnly 'com.h2database:h2'
+
+    // Test dependencies
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // Cucumber BDD
+    testImplementation 'io.cucumber:cucumber-java:7.22.2'
+    testImplementation 'io.cucumber:cucumber-junit-platform-engine:7.22.2'
+    testImplementation 'io.cucumber:cucumber-spring:7.22.2'
+
+    // ArchUnit
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.0'
+
+    // AssertJ (included via spring-boot-starter-test but explicit for clarity)
+    testImplementation 'org.assertj:assertj-core:3.27.3'
+
+    // JUnit platform
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.junit.platform:junit-platform-suite-api'
+    testRuntimeOnly 'org.junit.platform:junit-platform-suite-engine'
+
+    // Lombok test
+    testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+// ─── OpenAPI Generator ────────────────────────────────────────────────────────
+openApiGenerate {
+    generatorName = 'spring'
+    inputSpec = file("$projectDir/src/main/resources/openapi/openapi.yml").toURI().toString()
+    outputDir = "$buildDir/generated"
+    apiPackage = 'com.example.citassaludservice.interface_.rest.api'
+    modelPackage = 'com.example.citassaludservice.interface_.rest.dto'
+    configOptions = [
+        delegatePattern       : 'true',
+        interfaceOnly         : 'false',
+        useSpringBoot3        : 'true',
+        useTags               : 'true',
+        dateLibrary           : 'java8',
+        serializationLibrary  : 'jackson',
+        openApiNullable       : 'true',
+        skipDefaultInterface  : 'false'
+    ]
+    generateApiTests    = false
+    generateModelTests  = false
+    generateApiDocumentation  = false
+    generateModelDocumentation = false
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs += "$buildDir/generated/src/main/java"
+        }
+    }
+}
+
+compileJava.dependsOn tasks.openApiGenerate
+
+// ─── JaCoCo ───────────────────────────────────────────────────────────────────
+jacoco {
+    toolVersion = '0.8.13'
+}
+
+def jacocoExcludes = [
+    '**/build/generated/**',
+    'com/example/citassaludservice/interface_/rest/api/**',
+    'com/example/citassaludservice/interface_/rest/dto/**',
+    'com/example/citassaludservice/CitassaludServiceApplication*',
+    'org/openapitools/**'
+]
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: jacocoExcludes)
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn jacocoTestReport
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: jacocoExcludes)
+        }))
+    }
+    violationRules {
+        rule {
+            element = 'CLASS'
+            limit {
+                minimum = 0.80
+            }
+        }
+        rule {
+            element = 'BUNDLE'
+            limit {
+                minimum = 0.80
+            }
+        }
+    }
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
 }

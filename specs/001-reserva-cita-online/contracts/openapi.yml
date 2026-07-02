@@ -1,0 +1,348 @@
+openapi: 3.1.0
+
+info:
+  title: CitasSalud Schedule Service API
+  description: >
+    API de agendamiento de citas médicas en línea 24/7 para el microservicio
+    citassalud-service. Permite a los pacientes buscar médicos disponibles,
+    consultar franjas horarias y reservar citas.
+  version: 1.0.0
+  contact:
+    name: CitasSalud Team
+    email: christianapolo98@gmail.com
+
+servers:
+  - url: http://localhost:8080
+    description: Desarrollo local
+
+tags:
+  - name: medicos
+    description: Consulta de médicos y disponibilidad
+  - name: citas
+    description: Gestión de reservas de citas
+
+paths:
+
+  /api/v1/medicos:
+    get:
+      operationId: buscarMedicos
+      tags: [medicos]
+      summary: Buscar médicos disponibles
+      description: >
+        Retorna la lista de médicos que tienen franjas disponibles para la
+        especialidad y fecha indicadas.
+      parameters:
+        - name: especialidad
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/Especialidad'
+          description: Filtrar por especialidad médica
+        - name: fecha
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-07-01"
+          description: Filtrar por fecha de disponibilidad (YYYY-MM-DD)
+      responses:
+        "200":
+          description: Lista de médicos encontrados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MedicoResumen'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/medicos/{medicoId}/disponibilidad:
+    get:
+      operationId: obtenerDisponibilidadMedico
+      tags: [medicos]
+      summary: Obtener franjas horarias disponibles de un médico
+      description: >
+        Retorna únicamente las franjas con estado DISPONIBLE para el médico
+        y fecha indicados.
+      parameters:
+        - name: medicoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del médico
+        - name: fecha
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-07-01"
+          description: Fecha para la que se consulta la disponibilidad
+      responses:
+        "200":
+          description: Franjas horarias disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FranjaHoraria'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/citas:
+    post:
+      operationId: crearCita
+      tags: [citas]
+      summary: Reservar una cita médica
+      description: >
+        Crea una reserva de cita de forma atómica. Si la franja ya está ocupada,
+        retorna 409. La operación es idempotente para la misma combinación
+        (pacienteId, disponibilidadId).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearCitaRequest'
+      responses:
+        "201":
+          description: Cita creada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitaResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          description: La franja horaria ya está ocupada o la cita ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/citas/{citaId}:
+    get:
+      operationId: obtenerCita
+      tags: [citas]
+      summary: Obtener detalle de una cita
+      parameters:
+        - name: citaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la cita
+      responses:
+        "200":
+          description: Detalle de la cita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitaResponse'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/pacientes/{pacienteId}/citas:
+    get:
+      operationId: listarCitasPaciente
+      tags: [citas]
+      summary: Listar citas de un paciente
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del paciente
+        - name: estado
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EstadoCita'
+          description: Filtrar por estado de la cita
+      responses:
+        "200":
+          description: Lista de citas del paciente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CitaResponse'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+
+  schemas:
+
+    Especialidad:
+      type: string
+      enum:
+        - MEDICINA_GENERAL
+        - PEDIATRIA
+        - CARDIOLOGIA
+        - DERMATOLOGIA
+        - GINECOLOGIA
+        - ORTOPEDIA
+      description: Especialidad médica
+
+    EstadoCita:
+      type: string
+      enum:
+        - CONFIRMADA
+        - CANCELADA
+        - COMPLETADA
+      description: Estado del ciclo de vida de una cita
+
+    EstadoDisponibilidad:
+      type: string
+      enum:
+        - DISPONIBLE
+        - OCUPADA
+      description: Estado de una franja horaria
+
+    MedicoResumen:
+      type: object
+      required: [id, nombre, especialidad]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único del médico
+        nombre:
+          type: string
+          description: Nombre completo del médico
+        especialidad:
+          $ref: '#/components/schemas/Especialidad'
+
+    FranjaHoraria:
+      type: object
+      required: [id, medicoId, fecha, horaInicio, horaFin, estado]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único de la franja
+        medicoId:
+          type: string
+          format: uuid
+        fecha:
+          type: string
+          format: date
+        horaInicio:
+          type: string
+          format: time
+          example: "09:00:00"
+        horaFin:
+          type: string
+          format: time
+          example: "09:30:00"
+        estado:
+          $ref: '#/components/schemas/EstadoDisponibilidad'
+
+    CrearCitaRequest:
+      type: object
+      required: [pacienteId, disponibilidadId]
+      properties:
+        pacienteId:
+          type: string
+          format: uuid
+          description: Identificador del paciente que reserva
+        disponibilidadId:
+          type: string
+          format: uuid
+          description: Identificador de la franja horaria a reservar
+
+    CitaResponse:
+      type: object
+      required: [id, pacienteId, medicoId, fecha, horaInicio, horaFin, estado, creadaEn]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pacienteId:
+          type: string
+          format: uuid
+        medicoId:
+          type: string
+          format: uuid
+        medico:
+          $ref: '#/components/schemas/MedicoResumen'
+        fecha:
+          type: string
+          format: date
+        horaInicio:
+          type: string
+          format: time
+        horaFin:
+          type: string
+          format: time
+        estado:
+          $ref: '#/components/schemas/EstadoCita'
+        canalCreacion:
+          type: string
+          example: ONLINE
+        creadaEn:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [codigo, mensaje, timestamp]
+      properties:
+        codigo:
+          type: string
+          description: Código de error interno
+          example: FRANJA_NO_DISPONIBLE
+        mensaje:
+          type: string
+          description: Descripción legible del error
+          example: "La franja horaria seleccionada ya está ocupada. Por favor, elige otra franja."
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+
+    BadRequest:
+      description: Solicitud inválida — datos faltantes o con formato incorrecto
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

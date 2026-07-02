@@ -40,7 +40,23 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify all items below before proceeding. Any unchecked item MUST be resolved or
+explicitly deferred with justification.
+
+- [ ] **Clean Architecture**: Layers identified (Domain / Application / Infrastructure /
+  Interface). Dependency direction is inward only. No framework imports in Domain or
+  Application layers planned.
+- [ ] **BDD Testing**: BDD scenarios (Given/When/Then) drafted for every user story.
+  Test-first order confirmed: scenarios written → fail → implement.
+  Unit + integration + functional test scope defined.
+- [ ] **SOLID/YAGNI/DRY**: No speculative abstractions. Each planned class has a single
+  responsibility. Shared logic extracted; no duplication planned.
+- [ ] **API First**: `openapi.yml` contract authored or updated before implementation.
+  `openapi-generator` configured to produce server stubs and DTOs.
+  No hand-written endpoint boilerplate that duplicates the contract.
+- [ ] **Coverage gates**: Build configured to enforce per-class ≥ 80% and global ≥ 80%.
+  Coverage exclusions for generated code declared in build config.
+  CI step will fail build on threshold violation.
 
 ## Project Structure
 
